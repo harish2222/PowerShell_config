@@ -847,6 +847,12 @@ function signout {
 # Start-Sleep alias would shadow the function above unless removed.
 Remove-Item Alias:sleep -Force -ErrorAction SilentlyContinue
 
+# Memory-friendly aliases: logout == signout, restart == reboot (both accept
+# the same delay or `cancel`, so e.g. `logout cancel` and `restart cancel`
+# behave exactly like their canonical verbs).
+Set-Alias logout signout
+Set-Alias restart reboot
+
 function Show-Help {
 
 @'
@@ -896,6 +902,7 @@ Shortcuts:
   <cmd> cancel      Abort: shutdown/reboot cancel -> shutdown /a; the
                     lock/sleep/signout pair kills its hidden wait worker.
   lockmyscreen      Lock the screen immediately.
+  logout/restart    Same as signout/reboot (alias keywords for memory).
   winutil           Run the latest WinUtil release script.
   winutildev        Run the latest WinUtil prerelease script.
   music             Start mpd under ~/Music (if needed) and open ncmpc.
