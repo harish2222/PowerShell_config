@@ -530,7 +530,7 @@ function Initialize-PSReadLine {
         HistoryNoDuplicates           = $true
         HistorySearchCursorMovesToEnd = $true
         PredictionSource              = 'History'
-        PredictionViewStyle           = 'ListView'
+        PredictionViewStyle           = 'InlineView'
         BellStyle                     = 'None'
         Colors                        = @{
             Command   = '#87CEEB'
@@ -986,11 +986,19 @@ if (Test-Path $carapacePath) {
 }
 
 # ============================================================================
-# OH-MY-POSH — half-life theme (the module owns the prompt function)
+# OH-MY-POSH — half-life theme (cached init script for instant prompt load)
 # ============================================================================
 $env:POSH_THEME = Join-Path $env:USERPROFILE '.config\oh-my-posh\half-life.omp.json'
 if ($isInteractiveShell -and (Test-Path $env:POSH_THEME)) {
-    oh-my-posh init pwsh --config $env:POSH_THEME | Invoke-Expression
+    $poshCacheDir = Join-Path $env:LOCALAPPDATA 'oh-my-posh'
+    $poshCache = Join-Path $poshCacheDir 'init-pwsh-half-life.ps1'
+    if (-not (Test-Path $poshCacheDir)) {
+        New-Item -ItemType Directory -Path $poshCacheDir -Force | Out-Null
+    }
+    if (-not (Test-Path $poshCache) -or (Get-Item $env:POSH_THEME).LastWriteTimeUtc -gt (Get-Item $poshCache).LastWriteTimeUtc) {
+        oh-my-posh init pwsh --config $env:POSH_THEME | Set-Content -LiteralPath $poshCache -Encoding utf8
+    }
+    . $poshCache
 }
 
 if ($showHelpOnLaunch) {
