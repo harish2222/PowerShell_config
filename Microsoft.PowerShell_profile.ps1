@@ -529,8 +529,8 @@ function Initialize-PSReadLine {
         EditMode                      = 'Windows'
         HistoryNoDuplicates           = $true
         HistorySearchCursorMovesToEnd = $true
-        PredictionSource              = 'History'
-        PredictionViewStyle           = 'InlineView'
+        PredictionSource              = 'HistoryAndPlugin'
+        PredictionViewStyle           = 'ListView'
         BellStyle                     = 'None'
         Colors                        = @{
             Command   = '#87CEEB'
@@ -975,6 +975,66 @@ if (Test-Path $carapacePath) {
             & $carapacePath _carapace powershell | Set-Content -LiteralPath $script:CarapaceCache -Encoding UTF8
         }
         Invoke-Expression (Get-Content -LiteralPath $script:CarapaceCache -Raw)
+        # Universal fallback completer for any native command (current or future) via Carapace
+        Register-ArgumentCompleter -Native -CommandName * -ScriptBlock {
+            param($wordToComplete, $commandAst, $cursorPosition)
+            if (-not (Get-Command carapace -ErrorAction SilentlyContinue)) { return }
+            $commandElements = $commandAst.CommandElements
+            $elems = @()
+            foreach ($elem in $commandElements) {
+                if ($elem.Extent.StartOffset -gt $cursorPosition) { break }
+                $t = $elem.Extent.Text
+                if ($elem.Extent.EndOffset -gt $cursorPosition) {
+                    $t = $t.Substring(0, $elem.Extent.Text.Length - ($elem.Extent.EndOffset - $cursorPosition))
+                }
+                $elems += $t.Trim("'`"")
+            }
+            if ($elems.Count -eq 0) { return }
+            $cmd = ($elems[0] -replace '\.exe$', '')
+            try {
+                $json = if (-not $wordToComplete) {
+                    & carapace $cmd powershell @elems '' 2>$null
+                } else {
+                    & carapace $cmd powershell @elems 2>$null
+                }
+                if ($json) {
+                    $parsed = $json | ConvertFrom-Json
+                    $parsed | ForEach-Object {
+                        [System.Management.Automation.CompletionResult]::new($_.CompletionText, $_.ListItemText, [System.Management.Automation.CompletionResultType]::ParameterValue, $_.ToolTip)
+                    }
+                }
+            } catch { }
+        }
+        # Universal fallback completer for any native command (current or future) via Carapace
+        Register-ArgumentCompleter -Native -CommandName * -ScriptBlock {
+            param($wordToComplete, $commandAst, $cursorPosition)
+            if (-not (Get-Command carapace -ErrorAction SilentlyContinue)) { return }
+            $commandElements = $commandAst.CommandElements
+            $elems = @()
+            foreach ($elem in $commandElements) {
+                if ($elem.Extent.StartOffset -gt $cursorPosition) { break }
+                $t = $elem.Extent.Text
+                if ($elem.Extent.EndOffset -gt $cursorPosition) {
+                    $t = $t.Substring(0, $elem.Extent.Text.Length - ($elem.Extent.EndOffset - $cursorPosition))
+                }
+                $elems += $t.Trim("'`"")
+            }
+            if ($elems.Count -eq 0) { return }
+            $cmd = ($elems[0] -replace '\.exe$', '')
+            try {
+                $json = if (-not $wordToComplete) {
+                    & carapace $cmd powershell @elems '' 2>$null
+                } else {
+                    & carapace $cmd powershell @elems 2>$null
+                }
+                if ($json) {
+                    $parsed = $json | ConvertFrom-Json
+                    $parsed | ForEach-Object {
+                        [System.Management.Automation.CompletionResult]::new($_.CompletionText, $_.ListItemText, [System.Management.Automation.CompletionResultType]::ParameterValue, $_.ToolTip)
+                    }
+                }
+            } catch { }
+        }
     }
 
     if ($isInteractiveShell) {
@@ -1021,6 +1081,8 @@ if (Get-Command fzf -ErrorAction SilentlyContinue) {
     if ($isInteractiveShell -and (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue)) {
         # Ctrl+Space: Interactive fuzzy completion across all parameters, cmdlets, paths
         Set-PSReadLineKeyHandler -Chord 'Ctrl+Space' -ScriptBlock {
+            Enable-Carapace
+            Enable-Carapace
             if (Get-Command Enable-PSFzf -ErrorAction SilentlyContinue) { Enable-PSFzf }
             if (Get-Command Invoke-FzfTabCompletion -ErrorAction SilentlyContinue) {
                 Invoke-FzfTabCompletion

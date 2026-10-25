@@ -23,11 +23,26 @@ function Test-FastCommand {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
-# ─── zoxide cd replacement (alias only — the binary is queried on demand) ─────
+# ─── zoxide cd replacement (cached init with automatic directory tracking) ───
 if (Test-FastCommand zoxide) {
-    Set-Alias -Name z -Value zoxide
-    function cdz { param([string]$arg) if ($arg) { zoxide query $arg | Set-Location } else { zoxide query -i | Set-Location } }
-    Set-Alias -Name zi -Value cdz
+    $env:_ZO_ECHO = "1"
+    $env:_ZO_RESOLVE_SYMLINKS = "1"
+    $env:_ZO_FZF_OPTS = "--height 15 --min-height 10 --layout reverse --border rounded --info inline --prompt 'Zoxide❯ '"
+
+    $zoxideCacheDir = Join-Path $env:LOCALAPPDATA 'zoxide'
+    $zoxideCache = Join-Path $zoxideCacheDir 'init-pwsh.ps1'
+    $zoxideCmd = Get-Command zoxide -ErrorAction SilentlyContinue
+    $zoxideExe = if ($zoxideCmd) { $zoxideCmd.Source } else { $null }
+
+    if (-not (Test-Path $zoxideCacheDir)) {
+        New-Item -ItemType Directory -Path $zoxideCacheDir -Force | Out-Null
+    }
+    if ($zoxideExe -and ((-not (Test-Path $zoxideCache)) -or ((Get-Item $zoxideExe).LastWriteTimeUtc -gt (Get-Item $zoxideCache).LastWriteTimeUtc))) {
+        & $zoxideExe init powershell | Set-Content -LiteralPath $zoxideCache -Encoding UTF8
+    }
+    if (Test-Path $zoxideCache) {
+        . $zoxideCache
+    }
 }
 
 # ─── Bat man-pages ────────────────────────────────────────────────────────────
@@ -41,8 +56,14 @@ if (Test-FastCommand bat) {
 if (Test-FastCommand fzf) {
     $script:PSFzfLoaded = $false
 
+    $env:FZF_DEFAULT_OPTS = " --height 15 --min-height 10 --layout reverse --border rounded --info inline" +
+        " --color=bg+:#363a4f,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8" +
+        " --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc" +
+        " --color=marker:#b4befe,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8" +
+        " --color=selected-bg:#45475a,border:#89b4fa"
+
     function global:Invoke-FuzzyEnv {
-        $selected = Get-ChildItem env: | ForEach-Object { "$($_.Name)=$($_.Value)" } | fzf --prompt 'Env❯ ' --height 40% --layout reverse --border rounded
+        $selected = Get-ChildItem env: | ForEach-Object { "$($_.Name)=$($_.Value)" } | fzf --prompt 'Env❯ ' --height 15 --min-height 10 --layout reverse --border rounded
         if ($selected) {
             $varName = ($selected -split '=')[0]
             if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
@@ -54,7 +75,7 @@ if (Test-FastCommand fzf) {
     }
 
     function global:Invoke-FuzzyGitLog {
-        $hash = git log --oneline --color=always 2>$null | fzf --ansi --prompt 'Commit❯ ' --height 50% --layout reverse --border rounded --preview 'git show --color=always {1}'
+        $hash = git log --oneline --color=always 2>$null | fzf --ansi --prompt 'Commit❯ ' --height 15 --min-height 10 --layout reverse --border rounded --preview 'git show --color=always {1}'
         if ($hash) {
             $cleanHash = ($hash -split '\s+')[0]
             if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
