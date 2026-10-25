@@ -1011,3 +1011,57 @@ elseif ($isInteractiveShell) {
 
 # Microsoft.WinGet.CommandNotFound intentionally not imported:
 # it cost ~12s of the ~20s profile launch (it loads WinGet at startup).
+. "C:\Users\haris\.config\yasb\tools\theme\yasb-theme-shell.ps1"
+
+
+# ============================================================================
+# FZF — Interactive Fuzzy Autocompletion & Suggestions
+# ============================================================================
+if (Get-Command fzf -ErrorAction SilentlyContinue) {
+    if ($isInteractiveShell -and (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue)) {
+        # Ctrl+Space: Interactive fuzzy completion across all parameters, cmdlets, paths
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+Space' -ScriptBlock {
+            if (Get-Command Enable-PSFzf -ErrorAction SilentlyContinue) { Enable-PSFzf }
+            if (Get-Command Invoke-FzfTabCompletion -ErrorAction SilentlyContinue) {
+                Invoke-FzfTabCompletion
+            } else {
+                [Microsoft.PowerShell.PSConsoleReadLine]::MenuComplete()
+            }
+        }
+        # F2: Interactive Git branch switcher
+        Set-PSReadLineKeyHandler -Key F2 -ScriptBlock {
+            if (Get-Command Enable-PSFzf -ErrorAction SilentlyContinue) { Enable-PSFzf }
+            if (Get-Command Invoke-PsFzfGitBranches -ErrorAction SilentlyContinue) {
+                Invoke-PsFzfGitBranches
+            }
+        }
+    }
+
+    # Environment variables fuzzy finder
+    function Invoke-FuzzyEnv {
+        $selected = Get-ChildItem env: | ForEach-Object { "$($_.Name)=$($_.Value)" } | fzf --prompt 'Env❯ ' --height 40% --layout reverse --border rounded
+        if ($selected) {
+            $varName = ($selected -split '=')[0]
+            if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert("`$env:$varName")
+            } else {
+                "`$env:$varName"
+            }
+        }
+    }
+    Set-Alias -Name fenv -Value Invoke-FuzzyEnv -Force
+
+    # Git commit log browser with preview
+    function Invoke-FuzzyGitLog {
+        $hash = git log --oneline --color=always 2>$null | fzf --ansi --prompt 'Commit❯ ' --height 50% --layout reverse --border rounded --preview 'git show --color=always {1}'
+        if ($hash) {
+            $cleanHash = ($hash -split '\s+')[0]
+            if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert($cleanHash)
+            } else {
+                $cleanHash
+            }
+        }
+    }
+    Set-Alias -Name fgl -Value Invoke-FuzzyGitLog -Force
+}

@@ -37,16 +37,60 @@ if (Test-FastCommand bat) {
 
 # ─── fzf + PSFzf — lazily imported ────────────────────────────────────────────
 # PSFzf's Import-Module + Set-PsFzfOption cost >1s at startup. It is now loaded
-# the first time Ctrl+R / Ctrl+T is pressed (or by running Enable-PSFzf).
+# the first time Ctrl+R / Ctrl+T / Ctrl+Space / Alt+C is pressed (or by running Enable-PSFzf).
 if (Test-FastCommand fzf) {
     $script:PSFzfLoaded = $false
+
+    function global:Invoke-FuzzyEnv {
+        $selected = Get-ChildItem env: | ForEach-Object { "$($_.Name)=$($_.Value)" } | fzf --prompt 'Env❯ ' --height 40% --layout reverse --border rounded
+        if ($selected) {
+            $varName = ($selected -split '=')[0]
+            if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert("`$env:$varName")
+            } else {
+                "`$env:$varName"
+            }
+        }
+    }
+
+    function global:Invoke-FuzzyGitLog {
+        $hash = git log --oneline --color=always 2>$null | fzf --ansi --prompt 'Commit❯ ' --height 50% --layout reverse --border rounded --preview 'git show --color=always {1}'
+        if ($hash) {
+            $cleanHash = ($hash -split '\s+')[0]
+            if (Get-Module -Name PSReadLine -ErrorAction SilentlyContinue) {
+                [Microsoft.PowerShell.PSConsoleReadLine]::Insert($cleanHash)
+            } else {
+                $cleanHash
+            }
+        }
+    }
 
     function Enable-PSFzf {
         if ($script:PSFzfLoaded) { return }
         $script:PSFzfLoaded = $true
         Import-Module PSFzf -ErrorAction SilentlyContinue
         if (Get-Command Set-PsFzfOption -ErrorAction SilentlyContinue) {
-            Set-PsFzfOption -EnableCtrlT -EnableCtrlR -EnableAltC
+            $fzfOptions = @{
+                PSReadlineChordProvider = 'Ctrl+t'
+                PSReadlineChordReverseHistory = 'Ctrl+r'
+                PSReadlineChordSetLocation = 'Alt+c'
+                TabExpansion = $true
+                GitKeyBindings = $true
+                EnableAliasFuzzyEdit = $true
+                EnableAliasFuzzyHistory = $true
+                EnableAliasFuzzyKillProcess = $true
+                EnableAliasFuzzyScoop = $true
+                EnableAliasFuzzyGitStatus = $true
+                EnableAliasFuzzySetLocation = $true
+                EnableFd = $true
+            }
+            Set-PsFzfOption @fzfOptions
+            Set-Alias -Name fcd -Value Invoke-FuzzySetLocation -Scope Global -Force -ErrorAction SilentlyContinue
+            Set-Alias -Name fhistory -Value Invoke-FuzzyHistory -Scope Global -Force -ErrorAction SilentlyContinue
+            Set-Alias -Name fgb -Value Invoke-PsFzfGitBranches -Scope Global -Force -ErrorAction SilentlyContinue
+            Set-Alias -Name fgh -Value Invoke-PsFzfGitHashes -Scope Global -Force -ErrorAction SilentlyContinue
+            Set-Alias -Name fenv -Value Invoke-FuzzyEnv -Scope Global -Force -ErrorAction SilentlyContinue
+            Set-Alias -Name fgl -Value Invoke-FuzzyGitLog -Scope Global -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -59,6 +103,17 @@ if (Test-FastCommand fzf) {
         }
         Set-PSReadLineKeyHandler -Chord 'Ctrl+t' -ScriptBlock {
             Enable-PSFzf
+        }
+        Set-PSReadLineKeyHandler -Chord 'Alt+c' -ScriptBlock {
+            Enable-PSFzf
+        }
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+Space' -ScriptBlock {
+            Enable-PSFzf
+            if (Get-Command Invoke-FzfTabCompletion -ErrorAction SilentlyContinue) {
+                Invoke-FzfTabCompletion
+            } else {
+                [Microsoft.PowerShell.PSConsoleReadLine]::MenuComplete()
+            }
         }
     }
 }
