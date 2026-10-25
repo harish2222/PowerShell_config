@@ -38,10 +38,12 @@ if (Test-FastCommand zoxide) {
         New-Item -ItemType Directory -Path $zoxideCacheDir -Force | Out-Null
     }
     if ($zoxideExe -and ((-not (Test-Path $zoxideCache)) -or ((Get-Item $zoxideExe).LastWriteTimeUtc -gt (Get-Item $zoxideCache).LastWriteTimeUtc))) {
-        & $zoxideExe init powershell | Set-Content -LiteralPath $zoxideCache -Encoding UTF8
+        & $zoxideExe init powershell --cmd cd | Set-Content -LiteralPath $zoxideCache -Encoding UTF8
     }
     if (Test-Path $zoxideCache) {
         . $zoxideCache
+        Set-Alias -Name z -Value __zoxide_z -Option AllScope -Scope Global -Force
+        Set-Alias -Name zi -Value __zoxide_zi -Option AllScope -Scope Global -Force
     }
 }
 
